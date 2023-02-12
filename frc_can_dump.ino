@@ -4,7 +4,6 @@
 
 #include <Wire.h>
 #include <stdio.h>
-#include <SerialUSB.h>
 #include <Adafruit_BNO055.h>
 
 #include <Adafruit_ST7789.h>
@@ -14,6 +13,14 @@ const int8_t TFT_RST_PIN = 17;
 const int8_t TFT_DC_PIN = 16;
 const int8_t TFT_MOSI_PIN = 23;
 const int8_t TFT_SCLK_PIN = 18;
+unsigned long tStart = 0;
+
+struct GyroPayload {
+  //quaternion = [a + bi + cj + dk]
+  //Sensor outputs in quat
+  int16_t quat[4];
+};
+const int16_t gyro_api_id = 0;
 
 Adafruit_BNO055 bno(55, BNO055_ADDRESS_A, &Wire);
 double xPos = 0, yPos = 0, headingVel = 0;
@@ -79,7 +86,7 @@ void CANCallback( frc::CAN *can, int apiId, bool rtr, const frc::CANData &data )
   Serial.print( rtr ? "Received request for API " : "Received message for API " );
   Serial.print( apiId, HEX );
   if (!rtr) {
-    data.
+   // data.
   }
     
 }
@@ -130,16 +137,27 @@ void setup() {
 
 }
 
-void loop() {
-   // Update must be called every loop in order to receive messages
-    frc::CAN::Update();
+bool sendGyroPacket( const imu::Quaternion &quat ) {
+  GyroPayload payload { { 
+    (int16_t) quat.x(),
+    (int16_t) quat.y(),
+    (int16_t) quat.z(),
+    (int16_t) quat.w()
+  }};
+  return frcCANDevice.WritePacket( (uint8_t *) &payload, sizeof( payload ), gyro_api_id );
+}
 
-    uint8_t data[8];
+void loop() {
+  // Update must be called every loop in order to receive messages
+  frc::CAN::Update();
+
+  bno.getQuat();
 
   auto tnow = micros();
   if ((tnow - tStart) < (BNO055_SAMPLERATE_DELAY_MS * 1000)) {
 
-    //delayMicroseconds(BNO055_SAMPLERATE_DELAY_MS * 1000 - (tnow - tStart));
+    delayMicroseconds(BNO055_SAMPLERATE_DELAY_MS * 1000 - (tnow - tStart));
+    tStart = tnow;
   }
 
 }
