@@ -13,6 +13,27 @@ const int8_t TFT_RST_PIN = 17;
 const int8_t TFT_DC_PIN = 16;
 const int8_t TFT_MOSI_PIN = 23;
 const int8_t TFT_SCLK_PIN = 18;
+
+Adafruit_ST7789 tft( TFT_CS_PIN, TFT_DC_PIN, TFT_MOSI_PIN, TFT_SCLK_PIN, TFT_RST_PIN);
+
+// Define the CS pin and the interrupt pin
+const uint8_t CAN_SPI_BUS = HSPI;
+const int8_t CAN_SCLK_PIN = 14; // selected by HSPI
+const int8_t CAN_MOSI_PIN = 15; // selected by HSPI
+const int8_t CAN_MISO_PIN = 12; // selected by HSPI
+const int8_t CAN_CS_PIN = 33;
+const int8_t CAN_INT_PIN = 32;
+
+#define CAN_INTERRUPT 2
+
+// Create an MCP2515 device. Only need to create 1 of these
+SPIClass SPI2( HSPI );
+frc::MCP2515 canTransceiver{ CAN_CS_PIN, SPI2 };
+
+// Create an FRC CAN Device. You can create up to 16 of these in 1 progam
+// Any more will overflow a global array
+frc::CAN frcCANDevice{ 1 };
+
 unsigned long tStart = 0;
 
 struct GyroPayload {
@@ -58,28 +79,6 @@ void displaySensorDetails(void) {
   delay(500);
 }
 
-
-
-Adafruit_ST7789 tft( TFT_CS_PIN, TFT_DC_PIN, TFT_MOSI_PIN, TFT_SCLK_PIN, TFT_RST_PIN);
-
-// Define the CS pin and the interrupt pin
-const uint8_t CAN_SPI_BUS = HSPI;
-const int8_t CAN_SCLK_PIN = 14; // selected by HSPI
-const int8_t CAN_MOSI_PIN = 15; // selected by HSPI
-const int8_t CAN_MISO_PIN = 12; // selected by HSPI
-const int8_t CAN_CS_PIN = 33;
-const int8_t CAN_INT_PIN = 32;
-
-#define CAN_INTERRUPT 2
-
-// Create an MCP2515 device. Only need to create 1 of these
-SPIClass SPI2( HSPI );
-frc::MCP2515 canTransceiver{ CAN_CS_PIN, SPI2 };
-
-// Create an FRC CAN Device. You can create up to 16 of these in 1 progam
-// Any more will overflow a global array
-frc::CAN frcCANDevice{ 1 };
-
 // Callback function. This will be called any time a new message is received
 // Matching one of the enabled devices.
 void CANCallback( frc::CAN *can, int apiId, bool rtr, const frc::CANData &data ) {
@@ -94,7 +93,56 @@ void CANCallback( frc::CAN *can, int apiId, bool rtr, const frc::CANData &data )
 // Callback function for any messages not matching a known device.
 // This would still have flags for RTR and Extended set, its a raw ID
 void UnknownMessageCallback( uint32_t id, const frc::CANData &data ) {
-
+  bool rtr = (id & CAN_RTR_FLAG) != 0;
+  Serial.print( rtr ? "Received request Id=" : "Received message Id=" );
+  Serial.print( id, HEX );
+  Serial.print( " devT=" );
+  auto deviceType = frc::frcIdDecodeDeviceType( id );
+  switch( deviceType ) {
+    case frc::CANDeviceType::kBroadcast: Serial.print( "Broadcast" ); break;
+    case frc::CANDeviceType::kRobotController: Serial.print( "RobotController" ); break;
+    case frc::CANDeviceType::kMotorController: Serial.print( "MotorController" ); break;
+    case frc::CANDeviceType::kRelayController: Serial.print( "RelayController" ); break;
+    case frc::CANDeviceType::kGyroSensor: Serial.print( "GyroSensor" ); break;
+    case frc::CANDeviceType::kAccelerometer: Serial.print( "Accelerometer" ); break;
+    case frc::CANDeviceType::kUltrasonicSensor: Serial.print( "UltrasonicSensor" ); break;
+    case frc::CANDeviceType::kGearToothSensor: Serial.print( "GearToothSensor" ); break;
+    case frc::CANDeviceType::kPowerDistribution: Serial.print( "PowerDistribution" ); break;
+    case frc::CANDeviceType::kPneumatics: Serial.print( "Pneumatics" ); break;
+    case frc::CANDeviceType::kMiscellaneous: Serial.print( "Miscellaneous" ); break;
+    case frc::CANDeviceType::kFirmwareUpdate: Serial.print( "FirmwareUpdate" ); break;
+    default: Serial.print( "UNKNOWN(" ); Serial.print( static_cast<unsigned>( deviceType ) ); Serial.print( ")" ); break;
+  }
+  Serial.print( " manu=" );
+  auto manufacturer = frc::frcIdDecodeManufacturer( id );
+  switch( manufacturer ) {
+    case frc::CANManufacturer::kBroadcast: Serial.print( "Broadcast" ); break;
+    case frc::CANManufacturer::kNI: Serial.print( "NI" ); break;
+    case frc::CANManufacturer::kLM: Serial.print( "LM" ); break;
+    case frc::CANManufacturer::kDEKA: Serial.print( "DEKA" ); break;
+    case frc::CANManufacturer::kCTRE: Serial.print( "CTRE" ); break;
+    case frc::CANManufacturer::kREV: Serial.print( "REV" ); break;
+    case frc::CANManufacturer::kGrapple: Serial.print( "Grapple" ); break;
+    case frc::CANManufacturer::kMS: Serial.print( "MS" ); break;
+    case frc::CANManufacturer::kTeamUse: Serial.print( "TeamUse" ); break;
+    case frc::CANManufacturer::kKauaiLabs: Serial.print( "KauaiLabs" ); break;
+    case frc::CANManufacturer::kCopperforge: Serial.print( "Copperforge" ); break;
+    case frc::CANManufacturer::kPWF: Serial.print( "PWF" ); break;
+    case frc::CANManufacturer::kStudica: Serial.print( "Studica" ); break;
+    default: Serial.print( "UNKNOWN(" ); Serial.print( static_cast<unsigned>( manufacturer ) ); Serial.print( ")" ); break;
+  }
+  Serial.print( " api=" );
+  auto apiId = frc::frcIdDecodeApiId( id );
+  Serial.print( apiId );
+  if (!rtr && data.length > 0) {
+    Serial.print( " pay(" );
+    Serial.print( data.length );
+    Serial.print( ")=" );
+    for ( uint8_t pay_i = 0; pay_i < data.length; pay_i++) {
+      Serial.print( data.data[pay_i], HEX );
+    }
+  }
+  Serial.println( "" );
 }
 
 
